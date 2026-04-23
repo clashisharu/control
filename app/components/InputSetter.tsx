@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { useInputHandler } from "@/app/contexts/InputContext";
 
 export default function KeyboardListener() {
-  const { setactions } = useInputHandler();
+  const { setactions, setactions2 } = useInputHandler();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -18,6 +18,15 @@ export default function KeyboardListener() {
           default: return prev;
         }
       });
+      setactions2(prev => {
+        switch (e.code) {
+          case "ArrowRight": return { ...prev, Forward: true };
+          case "ArrowLeft": return { ...prev, Backward: true };
+          case "ArrowUp": return { ...prev, Jump: true };
+          case "ArrowDown": return { ...prev, Sit: true };
+          default: return prev;
+        }
+      });
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -27,6 +36,15 @@ export default function KeyboardListener() {
           case "KeyA": return { ...prev, Backward: false };
           case "Space": return { ...prev, Jump: false };
           case "KeyS": return { ...prev, Sit: false };
+          default: return prev;
+        }
+      });
+      setactions2(prev => {
+        switch (e.code) {
+          case "ArrowRight": return { ...prev, Forward: false };
+          case "ArrowLeft": return { ...prev, Backward: false };
+          case "ArrowUp": return { ...prev, Jump: false };
+          case "ArrowDown": return { ...prev, Sit: false };
           default: return prev;
         }
       });
