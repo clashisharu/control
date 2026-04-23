@@ -4,18 +4,19 @@ import InputSetter from "./components/InputSetter";
 import InputGetter from "./components/InputGetter";
 import { SelectorToggle, Selector } from "./components/Selector";
 import { OpenerProvider } from "@/app/contexts/OpenerContexts"
+import Scene from "@/app/components/Scene"
 
 export default function Home() {
   return (
     <InputProvider>
       <OpenerProvider>
         <div>
-          <SelectorToggle />   {/* client component */}
-          <InputSetter />      {/* client component */}
+          <SelectorToggle />   
+          <InputSetter />      
           
         <Selector/>
         </div>
-        <InputGetter />      {/* client component */}
+        <Scene />      {/* client component */}
       </OpenerProvider>
     </InputProvider>
   );

@@ -2,12 +2,13 @@
 import { useEffect } from "react";
 import { useInputHandler } from "@/app/contexts/InputContext";
 
-export default function GamepadListener() {
-  const { setactions, gamepads } = useInputHandler();
+export default function KeyboardListener() {
+  const { setactions } = useInputHandler();
 
   useEffect(() => {
-    // --- Keyboard mapping ---
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return; // ignore auto-repeat events
+
       setactions(prev => {
         switch (e.code) {
           case "KeyD": return { ...prev, Forward: true };
@@ -34,27 +35,11 @@ export default function GamepadListener() {
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
 
-    // --- Gamepad polling ---
-    const poll = () => {
-      if (gamepads.length > 0) {
-        const gp = gamepads[0]; // first controller
-        setactions(prev => ({
-          ...prev,
-          Jump: gp.buttons[0].pressed,        // A / Cross
-          Sit: gp.buttons[1].pressed,         // B / Circle
-          Forward: gp.axes[0] > 0.5,          // stick pushed right
-          Backward: gp.axes[0] < -0.5,        // stick pushed left
-        }));
-      }
-      requestAnimationFrame(poll);
-    };
-    poll();
-
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [gamepads, setactions]);
+  }, [setactions]);
 
-  return null; // just updates context
+  return null;
 }

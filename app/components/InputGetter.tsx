@@ -94,7 +94,6 @@ import { useEffect, useRef } from "react";
 import {
   Application,
   Assets,
-  Sprite,
   TilingSprite,
   AnimatedSprite,
   Texture,
@@ -116,13 +115,13 @@ export default function InputReceiver() {
 
     let app: Application | undefined;
     let background: TilingSprite | undefined;
-    let playerAnim: AnimatedSprite | undefined;
-    let playerSprite: Sprite | undefined;
+    let animBack: AnimatedSprite | undefined;
+    let animForward: AnimatedSprite | undefined;
 
     const setup = async () => {
       app = new Application();
       await app.init({
-        resizeTo: window,
+        resizeTo: pixiContainer.current!, // resize to the container instead of window
         backgroundAlpha: 0,
         antialias: true,
         preference: "webgl",
@@ -130,8 +129,12 @@ export default function InputReceiver() {
 
       pixiContainer.current!.appendChild(app.canvas);
 
-      // ---------- Background (tiling) ----------
+      // background
       const bgTexture = await Assets.load("/background.png");
+const naturalHeight = bgTexture.height;
+const groundLine = 244; // pixels from bottom where the floor is drawn
+const groundRatio = (naturalHeight - groundLine) / naturalHeight;
+
       background = new TilingSprite({
         texture: bgTexture,
         width: app.screen.width,
@@ -139,166 +142,127 @@ export default function InputReceiver() {
       });
       app.stage.addChild(background);
 
-      // ---------- Spritesheet slicing (Pixi v8 correct way) ----------
-      // Configure these to match your sheet:
+      // sprite sheet slicing
       const FRAME_WIDTH = 64;
       const FRAME_HEIGHT = 64;
-
-      // load the strip image as a base texture
       const baseTex = await Assets.load("/walk.png");
 
-const COLS = 4;
-const ROWS = 2;
+      const COLS = 4;
+      const ROWS = 2;
+      const backFrames: Texture[] = [];
+      const forwardFrames: Texture[] = [];
 
-const backFrames: Texture[] = [];
-const forwardFrames: Texture[] = [];
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const rect = new Rectangle(
+            c * FRAME_WIDTH,
+            r * FRAME_HEIGHT,
+            FRAME_WIDTH,
+            FRAME_HEIGHT
+          );
+          const tex = new Texture({ source: baseTex.source, frame: rect } as any);
+          if (r === 0) backFrames.push(tex);
+          else forwardFrames.push(tex);
+        }
+      }
 
-for (let r = 0; r < ROWS; r++) {
-  for (let c = 0; c < COLS; c++) {
-    const rect = new Rectangle(c * FRAME_WIDTH, r * FRAME_HEIGHT, FRAME_WIDTH, FRAME_HEIGHT);
-    const tex = new Texture({ source: baseTex.source, frame: rect } as any);
-    if (r === 0) backFrames.push(tex); // row 0 = backward
-    else if (r === 1) forwardFrames.push(tex); // row 1 = forward
-  }
-}
+      animBack = new AnimatedSprite(backFrames);
+      animBack.animationSpeed = 0.25;
+      animBack.loop = true;
+      animBack.anchor.set(0.5);
+      animBack.x = app.screen.width / 2;
+      animBack.y = pixiContainer.current!.offsetHeight - FRAME_HEIGHT; // responsive ground
+      animBack.visible = false;
+      app.stage.addChild(animBack);
 
-      // create AnimatedSprite from textures
-      const animBack = new AnimatedSprite(backFrames);
-animBack.animationSpeed = 0.25;
-animBack.loop = true;
-animBack.anchor.set(0.5);
-animBack.width = FRAME_WIDTH;
-animBack.height = FRAME_HEIGHT;
-animBack.x = app.screen.width / 2;
-animBack.y = app.screen.height - 100;
-animBack.visible = false;
-app.stage.addChild(animBack);
+      animForward = new AnimatedSprite(forwardFrames);
+      animForward.animationSpeed = 0.25;
+      animForward.loop = true;
+      animForward.anchor.set(0.5);
+      animForward.x = animBack.x;
+      animForward.y = animBack.y;
+      animForward.visible = true;
+      app.stage.addChild(animForward);
 
-const animForward = new AnimatedSprite(forwardFrames);
-animForward.animationSpeed = 0.25;
-animForward.loop = true;
-animForward.anchor.set(0.5);
-animForward.width = FRAME_WIDTH;
-animForward.height = FRAME_HEIGHT;
-animForward.x = animBack.x;
-animForward.y = animBack.y;
-animForward.visible = true;
-app.stage.addChild(animForward);
-
-
-
-let active = "forward"; // "forward" | "back"
-let wasMoving = false;
-
-      // ---------- Physics / movement ----------
+      let active = "forward";
+      let wasMoving = false;
       let velocityY = 0;
       const gravity = 0.5;
-      const groundY = app.screen.height - 220;
 
-      // Resize handler
-      const onResize = () => {
-        if (!app) return;
-        background!.width = app.screen.width;
-        background!.height = app.screen.height;
-        if (playerAnim) playerAnim.y = Math.min(playerAnim.y, app.screen.height - 100);
-        if (playerSprite) playerSprite.y = Math.min(playerSprite.y, app.screen.height - 100);
-      };
-      window.addEventListener("resize", onResize);
+      app.ticker.add(() => {
+        const a = actionsRef.current;
 
-      // Game loop
-     app.ticker.add(() => {
-  const a = actionsRef.current;
+        // background scroll
+        if (a.Forward) background!.tilePosition.x -= 2;
+        if (a.Backward) background!.tilePosition.x += 2;
 
-  // background scroll
-  if (a.Forward) background!.tilePosition.x -= 2;
-  if (a.Backward) background!.tilePosition.x += 2;
+        const intendsForward = !!a.Forward && !a.Backward;
+        const intendsBackward = !!a.Backward && !a.Forward;
+        const isMoving = intendsForward || intendsBackward;
 
-  // determine intent (prefer Forward when both pressed)
-  const intendsForward = !!a.Forward && !a.Backward;
-  const intendsBackward = !!a.Backward && !a.Forward;
-  const isMoving = intendsForward || intendsBackward;
+        const shouldBe = intendsBackward ? "back" : intendsForward ? "forward" : active;
 
-  // choose which animation should be active
-  const shouldBe = intendsBackward ? "back" : intendsForward ? "forward" : active;
+        if (shouldBe !== active) {
+          if (shouldBe === "back") {
+            animForward!.visible = false;
+            animForward!.stop();
+            animBack!.visible = true;
+            animBack!.play();
+          } else {
+            animBack!.visible = false;
+            animBack!.stop();
+            animForward!.visible = true;
+            animForward!.play();
+          }
+          active = shouldBe;
+        }
 
-  // switch only on change
-  if (shouldBe !== active) {
-    if (shouldBe === "back") {
-      // switch to backward animation
-      animForward.visible = false;
-      animForward.stop();
-      animBack.visible = true;
-      animBack.play();
-    } else if (shouldBe === "forward") {
-      animBack.visible = false;
-      animBack.stop();
-      animForward.visible = true;
-      animForward.play();
-    }
-    active = shouldBe;
-  }
+        if (isMoving && !wasMoving) {
+          active === "forward" ? animForward!.play() : animBack!.play();
+        } else if (!isMoving && wasMoving) {
+          if (active === "forward") {
+            animForward!.stop();
+            animForward!.gotoAndStop(0);
+          } else {
+            animBack!.stop();
+            animBack!.gotoAndStop(0);
+          }
+        }
+        wasMoving = isMoving;
 
-  // play/stop on movement transitions (avoid calling gotoAndStop every tick)
-  if (isMoving && !wasMoving) {
-    if (active === "forward") animForward.play();
-    else animBack.play();
-  } else if (!isMoving && wasMoving) {
-    if (active === "forward") {
-      animForward.stop();
-      animForward.gotoAndStop(0);
-    } else {
-      animBack.stop();
-      animBack.gotoAndStop(0);
-    }
-  }
-  wasMoving = isMoving;
+        // responsive ground based on container height
+        const groundY = pixiContainer.current!.offsetHeight * groundRatio;
 
-  // jump physics (unchanged) — apply to whichever anim is visible
-  if (a.Jump && (active === "forward" ? animForward.y : animBack.y) >= groundY) {
-    velocityY = -10;
-  }
-  velocityY += gravity;
-  if (active === "forward") animForward.y += velocityY;
-  else animBack.y += velocityY;
+        if (a.Jump && (active === "forward" ? animForward!.y : animBack!.y) >= groundY) {
+          velocityY = -10;
+        }
+        velocityY += gravity;
+        if (active === "forward") animForward!.y += velocityY;
+        else animBack!.y += velocityY;
 
-  // clamp to ground
-  if ((active === "forward" ? animForward.y : animBack.y) >= groundY) {
-    if (active === "forward") animForward.y = groundY;
-    else animBack.y = groundY;
-    velocityY = 0;
-  }
-});
-
-
-      // store cleanup
-      (app as any).__cleanup = () => {
-        window.removeEventListener("resize", onResize);
-      };
+        if ((active === "forward" ? animForward!.y : animBack!.y) >= groundY) {
+          if (active === "forward") animForward!.y = groundY;
+          else animBack!.y = groundY;
+          velocityY = 0;
+        }
+      });
     };
 
     setup();
 
     return () => {
       if (app) {
-        const cleanup = (app as any).__cleanup;
-        if (typeof cleanup === "function") cleanup();
         app.destroy();
       }
     };
   }, []);
 
   return (
-    <div className="flex-1 relative">
-    <div
-      ref={pixiContainer}
-      style={{
-        width: "100%",
-        height: "100%",
-        border: "2px solid black",
-        overflow: "hidden",
-      }}
-      className="h-full w-full absolute"
-    />
+    <div className="flex-1 relative h-full">
+      <div
+        ref={pixiContainer}
+        className="h-[1020px] h- w-full absolute border-black overflow-hidden"
+      />
     </div>
   );
 }

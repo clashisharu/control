@@ -19,24 +19,6 @@ useEffect(() => {
   function updateGamepads() {
     const pads = getConnectedGamepads();
     setGamepads(pads);
-
-    if (pads[0]) {
-      const gp = pads[0];
-      const newActions = {
-        Jump: gp.buttons[0].pressed,
-        Forward: gp.buttons[1].pressed,
-        Backward: gp.buttons[2].pressed,
-        Sit: gp.buttons[3].pressed,
-      };
-
-      // Only update if something changed
-      setactions(prev => {
-        if (JSON.stringify(prev) !== JSON.stringify(newActions)) {
-          return newActions;
-        }
-        return prev;
-      });
-    }
   }
 
   // Initial check
